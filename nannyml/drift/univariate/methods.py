@@ -8,7 +8,7 @@ import logging
 from copy import copy
 from enum import Enum
 from logging import Logger
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Type
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,7 @@ class Method(abc.ABC):
         display_name: str,
         column_name: str,
         chunker: Optional[Chunker] = None,
-        calculation_method: Optional[str] = None,
+        computation_params: Optional[Dict[str, Any]] = None,
         upper_threshold: Optional[float] = None,
         lower_threshold: Optional[float] = None,
         upper_threshold_limit: Optional[float] = None,
@@ -55,7 +55,6 @@ class Method(abc.ABC):
         self.lower_threshold: Optional[float] = lower_threshold
         self.lower_threshold_limit: Optional[float] = lower_threshold_limit
         self.upper_threshold_limit: Optional[float] = upper_threshold_limit
-        self.calculation_method: Optional[str] = calculation_method
         self.chunker: Optional[Chunker] = chunker
 
     def fit(self, reference_data: pd.Series, timestamps: Optional[pd.Series] = None) -> Method:
@@ -132,7 +131,7 @@ class FeatureType(str, Enum):
 class MethodFactory:
     """A factory class that produces Method instances given a 'key' string and a 'feature_type' it supports."""
 
-    registry: Dict[str, Dict[FeatureType, Method]] = {}
+    registry: Dict[str, Dict[FeatureType, Type[Method]]] = {}
 
     @classmethod
     def _logger(cls) -> Logger:
@@ -165,7 +164,7 @@ class MethodFactory:
             kwargs = {}
 
         method_class = cls.registry[key][feature_type]
-        return method_class(**kwargs)  # type: ignore
+        return method_class(**kwargs)
 
     @classmethod
     def register(cls, key: str, feature_type: FeatureType) -> Callable:
@@ -192,7 +191,7 @@ class MethodFactory:
         ...   pass
         """
 
-        def inner_wrapper(wrapped_class: Method) -> Method:
+        def inner_wrapper(wrapped_class: Type[Method]) -> Type[Method]:
             if key not in cls.registry:
                 cls.registry[key] = {feature_type: wrapped_class}
             else:
@@ -297,8 +296,8 @@ class KolmogorovSmirnovStatistic(Method):
             display_name='Kolmogorov-Smirnov statistic',
             column_name='kolmogorov_smirnov',
             upper_threshold_limit=1,
-            lower_threshold=None,  # setting this to `None` so we don't plot the threshold (p-value based)
-            **kwargs,
+            lower_threshold=None,
+            **kwargs,  # setting this to `None` so we don't plot the threshold (p-value based)
         )
         self._reference_data: Optional[pd.Series] = None
         self._p_value: Optional[float] = None
@@ -306,19 +305,21 @@ class KolmogorovSmirnovStatistic(Method):
         self._qts: np.ndarray
         self._ref_rel_freqs: Optional[np.ndarray] = None
         self._fitted = False
+        if (not kwargs) or not (kwargs['computation_params']) or (self.column_name not in kwargs['computation_params']):
+            self.calculation_method = 'auto'
+            self.n_bins = 10_000
+        else:
+            self.calculation_method = kwargs['computation_params'].get('calculation_method', 'auto')
+            self.n_bins = kwargs['computation_params'].get('n_bins', 10_000)
 
-    def _fit(
-        self, reference_data: pd.Series, timestamps: Optional[pd.Series] = None, bins: Optional[int] = None
-    ) -> Method:
+    def _fit(self, reference_data: pd.Series, timestamps: Optional[pd.Series] = None) -> Method:
         reference_data = _remove_missing_data(reference_data)
         if (self.calculation_method == 'auto' and len(reference_data) < 10_000) or self.calculation_method == 'exact':
             self._reference_data = reference_data
         else:
-            if bins is None:
-                bins = len(reference_data) // 500
-            quantile_range = np.arange(0, 1 + 1 / bins, 1 / bins)
-            quantile_edges = np.quantile(reference_data, quantile_range)
-            reference_proba_in_qts, self._qts = np.histogram(reference_data, quantile_edges)
+            quantile_range = np.linspace(np.min(reference_data), np.max(reference_data), self.n_bins + 1)
+            # quantile_edges = np.quantile(reference_data, quantile_range)
+            reference_proba_in_qts, self._qts = np.histogram(reference_data, quantile_range)
             ref_rel_freqs = reference_proba_in_qts / len(reference_data)
             self._ref_rel_freqs = np.cumsum(ref_rel_freqs)
         self._reference_size = len(reference_data)
@@ -373,7 +374,7 @@ class Chi2Statistic(Method):
             lower_threshold=None,  # setting this to `None` so we don't plot the threshold (p-value based)
             **kwargs,
         )
-        self._reference_data_vcs: Optional[pd.Series] = None
+        self._reference_data_vcs: pd.Series
         self._p_value: Optional[float] = None
         self._fitted = False
 
@@ -390,27 +391,25 @@ class Chi2Statistic(Method):
                 "tried to call 'calculate' on an unfitted method " f"{self.display_name}. Please run 'fit' first"
             )
 
-        stat, p_value, _, _ = chi2_contingency(
-            pd.concat(
-                [self._reference_data_vcs, data.value_counts()],  # type: ignore
-                axis=1,
-            ).fillna(0)
-        )
-        self._p_value = p_value
+        stat, self._p_value = self._calc_chi2(data)
         return stat
 
     def _alert(self, data: pd.Series):
         if self._p_value is None:
-            _, self._p_value, _, _ = chi2_contingency(
-                pd.concat(
-                    [self._reference_data.value_counts(), data.value_counts()],  # type: ignore
-                    axis=1,
-                ).fillna(0)
-            )
+            _, self._p_value = self._calc_chi2(data)
 
         alert = self._p_value < 0.05
         self._p_value = None
         return alert
+
+    def _calc_chi2(self, data: pd.Series):
+        stat, p_value, _, _ = chi2_contingency(
+            pd.concat(
+                [self._reference_data_vcs, data.value_counts()],
+                axis=1,
+            ).fillna(0)
+        )
+        return stat, p_value
 
 
 @MethodFactory.register(key='l_infinity', feature_type=FeatureType.CATEGORICAL)
@@ -479,20 +478,22 @@ class WassersteinDistance(Method):
         self._p_value: Optional[float] = None
         self._reference_size: float
         self._bin_width: float
-        self._bin_edges: Optional[np.ndarray] = None
+        self._bin_edges: np.ndarray
         self._ref_rel_freqs: Optional[np.ndarray] = None
         self._fitted = False
+        if (not kwargs) or not (kwargs['computation_params']) or (self.column_name not in kwargs['computation_params']):
+            self.calculation_method = 'auto'
+            self.n_bins = 10_000
+        else:
+            self.calculation_method = kwargs['computation_params'].get('calculation_method', 'auto')
+            self.n_bins = kwargs['computation_params'].get('n_bins', 10_000)
 
-    def _fit(
-        self, reference_data: pd.Series, timestamps: Optional[pd.Series] = None, bins: Optional[int] = None
-    ) -> Method:
+    def _fit(self, reference_data: pd.Series, timestamps: Optional[pd.Series] = None) -> Method:
         reference_data = _remove_missing_data(reference_data)
         if (self.calculation_method == 'auto' and len(reference_data) < 10_000) or self.calculation_method == 'exact':
             self._reference_data = reference_data
         else:
-            if bins is None:
-                bins = len(reference_data) // 500
-            reference_proba_in_bins, self._bin_edges = np.histogram(reference_data, bins=bins)
+            reference_proba_in_bins, self._bin_edges = np.histogram(reference_data, bins=self.n_bins)
             self._ref_rel_freqs = reference_proba_in_bins / len(reference_data)
             self._bin_width = self._bin_edges[1] - self._bin_edges[0]
 
@@ -528,7 +529,6 @@ class WassersteinDistance(Method):
         ) or self.calculation_method == 'estimated':
             min_chunk = np.min(data)
 
-            assert self._bin_edges is not None
             if min_chunk < self._bin_edges[0]:
                 extra_bins_left = (min_chunk - self._bin_edges[0]) / self._bin_width
                 extra_bins_left = np.ceil(extra_bins_left)
