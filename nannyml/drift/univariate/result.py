@@ -2,11 +2,11 @@
 #
 #  License: Apache Software License 2.0
 
-"""Contains the results of the univariate statistical drift calculation and provides plotting functionality."""
+"""Contains the results of the univariate drift calculator and provides plotting functionality."""
 from __future__ import annotations
 
 import warnings
-from typing import cast, List, Optional
+from typing import List, Optional, cast
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -15,19 +15,21 @@ with warnings.catch_warnings():
 import plotly.graph_objects as go
 
 from nannyml._typing import Key
-from nannyml.base import Abstract2DResult
-from nannyml.chunk import Chunker
+from nannyml.base import PerMetricPerColumnResult
+from nannyml.chunk import Chunker, DefaultChunker
 from nannyml.drift.univariate.methods import FeatureType, Method, MethodFactory
 from nannyml.exceptions import InvalidArgumentsException
+from nannyml.plots import Colors
 from nannyml.plots.blueprints.comparisons import ResultCompareMixin
 from nannyml.plots.blueprints.distributions import plot_distributions
 from nannyml.plots.blueprints.metrics import plot_metrics
 from nannyml.plots.components import Hover
+from nannyml.thresholds import StandardDeviationThreshold
 from nannyml.usage_logging import UsageEvent, log_usage
 
 
-class Result(Abstract2DResult, ResultCompareMixin):
-    """Contains the results of the univariate statistical drift calculation and provides plotting functionality."""
+class Result(PerMetricPerColumnResult[Method], ResultCompareMixin):
+    """Class wrapping the results of the univariate drift calculator and providing plotting functionality."""
 
     def __init__(
         self,
@@ -42,8 +44,55 @@ class Result(Abstract2DResult, ResultCompareMixin):
         analysis_data: pd.DataFrame = None,
         reference_data: pd.DataFrame = None,
     ):
-        categorical_methods = [MethodFactory.create(m, FeatureType.CATEGORICAL) for m in categorical_method_names]
-        continuous_methods = [MethodFactory.create(m, FeatureType.CONTINUOUS) for m in continuous_method_names]
+        """
+        Parameters
+        ----------
+        results_data: pd.DataFrame
+            Results data returned by a DataReconstructionDriftCalculator.
+        column_names: List[str]
+            A list of column names indicating which columns contain feature values.
+        categorical_column_names : List[str]
+            Subset of categorical features to be included in calculation.
+        continuous_column_names : List[str]
+            Subset of continuous features to be included in calculation.
+        categorical_method_names: List[str]
+            A list of method names that will be performed on categorical columns.
+            Supported methods for categorical variables:
+
+                - `jensen_shannon`
+                - `chi2`
+                - `hellinger`
+                - `l_infinity`
+        continuous_method_names: List[str]
+            A list of method names that will be performed on continuous columns.
+            Supported methods for continuous variables:
+
+                - `jensen_shannon`
+                - `kolmogorov_smirnov`
+                - `hellinger`
+                - `wasserstein`
+        timestamp_column_name: Optional[str], default=None
+            The name of the column containing the timestamp of the model prediction.
+            If not given, plots will not use a time-based x-axis but will use the index of the chunks instead.
+        chunker: Chunker
+            The `Chunker` used to split the data sets into a lists of chunks.
+        analysis_data: pd.DataFrame, default= None
+            Portion of data that NannyML will use to calculate the observed drift.
+        reference_data: pd.DataFrame, default = None
+            Portion of data that NannyML will use to fit its drift methods.
+        """
+        categorical_methods = [
+            MethodFactory.create(
+                m, FeatureType.CATEGORICAL, chunker=DefaultChunker(), threshold=StandardDeviationThreshold()
+            )
+            for m in categorical_method_names
+        ]
+        continuous_methods = [
+            MethodFactory.create(
+                m, FeatureType.CONTINUOUS, chunker=DefaultChunker(), threshold=StandardDeviationThreshold()
+            )
+            for m in continuous_method_names
+        ]
         methods = continuous_methods + categorical_methods
         # Passing on methods as metrics to base class, as they're essentially a more specialised form of metrics
         # satisfying the same contract
@@ -72,10 +121,10 @@ class Result(Abstract2DResult, ResultCompareMixin):
         column_names: Optional[List[str]] = None,
         methods: Optional[List[str]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> Result:
         # TODO: Use TypeVar with generic self instead of cast
-        result = cast(Result, super()._filter(period, methods, column_names))
+        result = cast(Result, super()._filter(period, methods, column_names, *args, **kwargs))
         method_names = [m.column_name for m in result.methods]
 
         # The `column_names` and `methods` filters can impact each other. Handled conditionally here
@@ -118,6 +167,10 @@ class Result(Abstract2DResult, ResultCompareMixin):
         return continuous_values + categorical_values
 
     def keys(self) -> List[Key]:
+        """
+        Creates a list of keys for continuos and categorial columns where each Key is a `namedtuple('Key',
+        'properties display_names')`
+        """
         continuous_keys = [
             Key(properties=(column, method.column_name), display_names=(column, method.display_name))
             for column in sorted(self.continuous_column_names)
@@ -140,19 +193,17 @@ class Result(Abstract2DResult, ResultCompareMixin):
         """Renders plots for metrics returned by the univariate distance drift calculator.
 
         For any feature you can render the statistic value or p-values as a step plot, or create a distribution plot.
-        Select a plot using the ``kind`` parameter:
-
-        - ``drift``
-                plots drift per :class:`~nannyml.chunk.Chunk` for a single feature of a chunked data set.
-        - ``distribution``
-                plots feature distribution per :class:`~nannyml.chunk.Chunk`.
-                Joyplot for continuous features, stacked bar charts for categorical features.
 
         Parameters
         ----------
-        kind: str, default=`drift`
-            The kind of plot you want to have. Allowed values are `drift`` and ``distribution``.
+        kind: str, default='drift'
+            The kind of plot you want to have. Allowed values are:
 
+            - 'drift'
+                    plots drift per :class:`~nannyml.chunk.Chunk` for a single feature of a chunked data set.
+            - 'distribution'
+                    plots feature distribution per :class:`~nannyml.chunk.Chunk`.
+                    Joyplot for continuous features, stacked bar charts for categorical features.
         Returns
         -------
         fig: :class:`plotly.graph_objs._figure.Figure`
@@ -191,6 +242,8 @@ class Result(Abstract2DResult, ResultCompareMixin):
                 ),
                 subplot_title_format='{display_names[1]} for <b>{display_names[0]}</b>',
                 subplot_y_axis_title_format='{display_names[1]}',
+                color=Colors.BLUE_SKY_CRAYOLA,
+                metric_name='Method',
             )
         elif kind == 'distribution':
             return plot_distributions(

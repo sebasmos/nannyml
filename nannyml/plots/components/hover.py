@@ -13,7 +13,7 @@ import pandas as pd
 
 from nannyml.exceptions import InvalidArgumentsException
 from nannyml.plots.colors import Colors
-from nannyml.plots.util import is_time_series
+from nannyml.plots.util import has_non_null_data
 
 
 class Hover:
@@ -67,12 +67,12 @@ def _render_string(column: Union[np.ndarray, pd.Series], render_func: Callable) 
     return np.vectorize(render_func)(column)
 
 
-def render_period_string(period_column: Union[np.ndarray, pd.Series]) -> np.ndarray:
+def render_period_string(period_column: Union[np.ndarray, pd.Series], color: Optional[str] = None) -> np.ndarray:
     return _render_string(
         period_column,
-        lambda x: f'<b style="color:{Colors.BLUE_SKY_CRAYOLA};line-height:60px">Reference</b>'
+        lambda x: f'<b style="color:{color or Colors.BLUE_SKY_CRAYOLA};line-height:60px">Reference</b>'
         if x == 'reference'
-        else f'<b style="color:{Colors.INDIGO_PERSIAN};line-height:60px">Analysis</b>',
+        else f'<b style="color:{color or Colors.INDIGO_PERSIAN};line-height:60px">Analysis</b>',
     )
 
 
@@ -98,7 +98,7 @@ def render_x_coordinate(
     end_dates_column: Optional[Union[np.ndarray, pd.Series]] = None,
     date_format: str = '%b-%d-%Y',
 ) -> np.ndarray:
-    if is_time_series(start_dates_column) and is_time_series(end_dates_column):
+    if has_non_null_data(start_dates_column) and has_non_null_data(end_dates_column):
         return np.array(
             [
                 f'From <b>{s.strftime(date_format)}</b> to <b>{e.strftime(date_format)}</b>'

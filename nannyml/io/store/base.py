@@ -20,7 +20,7 @@ class Store(ABC):
 
     This abstract base class does not restrict in any way how the storage mechanism should work.
 
-    The only implementation currently is the :class:`nannyml.io.store.file_store.FilesystemStore`.
+    The only implementation currently is the :class:`~nannyml.io.store.file_store.FilesystemStore`.
     """
 
     @property
@@ -61,9 +61,13 @@ class Store(ABC):
 
         Parameters
         ----------
-        as_type : Optional[type]
-            When provided the `load` method will check if the loaded object is an instance of `as_type`. If it is not
-            a StoreException will be raised.
+        as_type : Optional[type], default=None
+            When provided the `load` method will check if the loaded object is an instance of `as_type` or `None`.
+            If it is not a StoreException will be raised.
+
+            The `None` will be returned when no calculator was present at the store location, for example
+            when performing the first run of NannyML (nothing was cached yet at that point).
+
             The object will be returned unchecked when the `as_type` parameter is not provided.
         load_args : Dict[str, Any]
             Additional arguments passed to the subclass `store` implementation
@@ -76,12 +80,12 @@ class Store(ABC):
         try:
             self._logger.info(f'loading object from store "{self}"')
             obj = self._load(**load_args)
-            if as_type and not (obj is None or isinstance(obj, as_type)):
-                raise StoreException(f'loaded object is not of type "{type}"')
+            if as_type and obj and not isinstance(obj, as_type):
+                raise StoreException(f'loaded object is not of type "{as_type}"')
             return obj
         except Exception as exc:
             raise StoreException(f'an unexpected exception occurred when loading object: {exc}')
 
     @abstractmethod
-    def _load(self, path: str, **load_args):
+    def _load(self, **load_args):
         ...

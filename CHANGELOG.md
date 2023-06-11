@@ -4,6 +4,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2023-05-24
+
+### Changed
+
+- Significant QA work on all the documentation, thanks [@santiviquez](https://github.com/santiviquez) and
+  [@maciejbalawejder](https://github.com/maciejbalawejder)
+- Reworked the [`nannyml.runner`](nannyml/runner.py) and the accompanying configuration format to improve flexibility (e.g. setting
+  custom initialization parameters, running a calculator multiple times, excluding a calculator, ...).
+- Added support for custom thresholds to the [`nannyml.runner`](nannyml/runner.py)
+- Simplified some of the `nannyml.io` interfaces, especially the [`nannyml.io.RawFilesWriter`](nannyml/io/raw_files_writer.py)
+- Reworked the [`nannyml.base.Result`](nannyml/base.py)
+- Totally revamped [quickstart documentation](docs/quick.rst) based on a real life dataset, thanks [@jakubnml](https://github.com/jakubnml)
+
+### Added
+
+- Added new calculators to support simple data quality metrics such as counting missing or unseen values.
+  For more information, check out the [data quality tutorials](https://nannyml.readthedocs.io/en/main/tutorials/data_quality.html).
+
+### Fixed
+
+- Fixed an issue where x-axis titles would appear on top of plots
+- Removed erroneous checks during calculation of realized regression performance metrics. [(#279)](https://github.com/NannyML/nannyml/issues/279)
+- Fixed an issue dealing with `az://` URLs in the CLI, thanks [@michael-nml](https://github.com/michael-nml) [(#283)](https://github.com/NannyML/nannyml/issues/283)
+
+## [0.8.5] - 2023-03-29
+
+### Changed
+
+- Applied new rules for visualizations. Estimated values will be the color indigo and represented with a dashed line.
+  Calculated values will be blue and have a solid line. This color coding might be overridden in comparison plots.
+  Data periods will no longer have different colors, we've added some additional text fields to the plot to indicate the data period.
+- Cleaned up legends in plots, since there will no longer be a different entry for reference and analysis periods of metrics.
+- Removed the lower threshold for default thresholds of the KS and Wasserstein drift detection methods.
+
+### Added
+
+- We've added the `business_value` metric for both estimated and realized binary classification performance. It allows
+  you to assign a value (or cost) to true positive, true negative, false positive and false negative occurrences.
+  This can help you track something like a monetary value or business impact of a model as a metric. Read more in the
+  business value tutorials ([estimated](https://nannyml.readthedocs.io/en/latest/tutorials/performance_estimation/binary_performance_estimation/business_value_estimation.html)
+  or [realized](https://nannyml.readthedocs.io/en/latest/tutorials/performance_calculation/binary_performance_calculation/business_value_calculation.html))
+  or the [how it works](https://nannyml.readthedocs.io/en/latest/how_it_works/business_value.html) page.
+
+### Fixed
+
+- Sync quickstart of the README with the dedicated quickstart page. [(#256)](https://github.com/NannyML/nannyml/issues/256)
+  Thanks [@NeoKish](https://github.com/NeoKish)!
+- Fixed incorrect code snippet order in the thresholding tutorial. [(#258)](https://github.com/NannyML/nannyml/issues/258)
+  Thanks once more to the one and only [@NeoKish](https://github.com/NeoKish)!
+- Fixed broken container build that had sneakily been going on for a while
+- Fixed incorrect confidence band color in comparison plots [(#259)](https://github.com/NannyML/nannyml/issues/259)
+- Fixed incorrect titles and missing legends in comparison plots [(#264)](https://github.com/NannyML/nannyml/issues/264)
+- Fixed an issue where numerical series marked as category would cause issues during Chi2 calculation
+
+## [0.8.4] - 2023-03-17
+
+### Changed
+
+- Updated univariate drift methods to no longer store all reference data by default [(#182)](https://github.com/NannyML/nannyml/issues/182)
+- Updated univariate drift methods to deal better with missing data [(#202)](https://github.com/NannyML/nannyml/issues/202)
+- Updated the included example datasets
+- Critical security updates for dependencies
+- Updated visualization of multi-level table headers in the docs [(#242)](https://github.com/NannyML/nannyml/issues/242)
+- Improved typing support for Result classes using generics
+
+### Added
+
+- Support for estimating the confusion matrix for binary classification [(#191)](https://github.com/NannyML/nannyml/issues/191)
+- Added `treat_as_categorical` parameter to univariate drift calculator [(#239)](https://github.com/NannyML/nannyml/issues/239)
+- Added comparison plots to help visualize two different metrics at once
+
+### Fixed
+
+- Fix missing confidence boundaries in some plots [(#193)](https://github.com/NannyML/nannyml/issues/193)
+- Fix incorrect metric names on plot y-axes [(#195)](https://github.com/NannyML/nannyml/issues/195)
+- Fix broken links to external docs [(#196)](https://github.com/NannyML/nannyml/issues/196)
+- Fix missing display name to performance calculation and estimation charts [(#200)](https://github.com/NannyML/nannyml/issues/200)
+- Fix missing confidence boundaries for single metric plots [(#203)](https://github.com/NannyML/nannyml/issues/203)
+- Fix incorrect code in example notebook for ranking
+- Fix result corruption when re-using calculators [(#206)](https://github.com/NannyML/nannyml/issues/206)
+- Fix unintentional period filtering [(#199)](https://github.com/NannyML/nannyml/issues/199)
+- Fixed some typing issues [(#213)](https://github.com/NannyML/nannyml/issues/213)
+- Fixed missing data requirements documentation on regression [(#215)](https://github.com/NannyML/nannyml/issues/215)
+- Corrections in the glossary [(#214)](https://github.com/NannyML/nannyml/issues/214), thanks [@sebasmos](https://github.com/sebasmos)!
+- Fix missing treshold in plotting legend [(#219)](https://github.com/NannyML/nannyml/issues/219)
+- Fix missing annotation in single row & column charts [(#221)](https://github.com/NannyML/nannyml/issues/221)
+- Fix outdated performance estimation and calculation docs [(#223)](https://github.com/NannyML/nannyml/issues/223)
+- Fix categorical encoding of unseen values for DLE [(#224)](https://github.com/NannyML/nannyml/issues/224)
+- Fix incorrect legend for None timeseries [(#235)](https://github.com/NannyML/nannyml/issues/235)
+
 ## [0.8.3] - 2023-01-31
 
 ### Added

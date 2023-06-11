@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Generic, List, Optional, Tuple, TypeVar, Union
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,8 @@ from nannyml.exceptions import (
     InvalidArgumentsException,
     InvalidReferenceDataException,
 )
+
+MetricLike = TypeVar('MetricLike', bound=Metric)
 
 
 class AbstractResult(ABC):
@@ -78,9 +80,7 @@ class AbstractResult(ABC):
             single_level_data.columns = column_names
             return single_level_data
 
-    def filter(
-        self, period: str = 'all', metrics: Optional[Union[str, List[str]]] = None, *args, **kwargs
-    ) -> Self:
+    def filter(self, period: str = 'all', metrics: Optional[Union[str, List[str]]] = None, *args, **kwargs) -> Self:
         """Returns filtered result metric data."""
         if metrics and not isinstance(metrics, (str, list)):
             raise InvalidArgumentsException("metrics value provided is not a valid metric or list of metrics")
@@ -125,9 +125,8 @@ class AbstractResult(ABC):
 
 
 class Abstract1DResult(AbstractResult, ABC):
-    def __init__(self, results_data: pd.DataFrame, metrics: Sequence[Metric] = (), *args, **kwargs):
+    def __init__(self, results_data: pd.DataFrame, *args, **kwargs):
         super().__init__(results_data)
-        self.metrics = metrics
 
     @property
     def chunk_keys(self) -> pd.Series:
@@ -142,6 +141,14 @@ class Abstract1DResult(AbstractResult, ABC):
         return self.data[('chunk', 'end_date')]
 
     @property
+    def chunk_start_indices(self) -> pd.Series:
+        return self.data[('chunk', 'start_index')]
+
+    @property
+    def chunk_end_indices(self) -> pd.Series:
+        return self.data[('chunk', 'end_index')]
+
+    @property
     def chunk_indices(self) -> pd.Series:
         return self.data[('chunk', 'chunk_index')]
 
@@ -149,34 +156,77 @@ class Abstract1DResult(AbstractResult, ABC):
     def chunk_periods(self) -> pd.Series:
         return self.data[('chunk', 'period')]
 
+    def _filter(self, period: str, *args, **kwargs) -> Self:
+        data = self.data
+        if period != 'all':
+            data = self.data.loc[self.data.loc[:, ('chunk', 'period')] == period, :]
+            data = data.reset_index(drop=True)
+
+        res = copy.deepcopy(self)
+        res.data = data
+        return res
+
+
+class PerMetricResult(Abstract1DResult, ABC, Generic[MetricLike]):
+    def __init__(self, results_data: pd.DataFrame, metrics: list[MetricLike] = [], *args, **kwargs):
+        super().__init__(results_data)
+        self.metrics = metrics
+
     def _filter(self, period: str, metrics: Optional[List[str]] = None, *args, **kwargs) -> Self:
         if metrics is None:
             metrics = [metric.column_name for metric in self.metrics]
 
-        data = pd.concat([self.data.loc[:, (['chunk'])], self.data.loc[:, (metrics,)]], axis=1)
-        if period != 'all':
-            data = data.loc[self.data.loc[:, ('chunk', 'period')] == period, :]
+        res = super()._filter(period, *args, **kwargs)
 
+        data = pd.concat([res.data.loc[:, (['chunk'])], res.data.loc[:, (metrics,)]], axis=1)
         data = data.reset_index(drop=True)
 
-        res = copy.deepcopy(self)
         res.data = data
         res.metrics = [metric for metric in self.metrics if metric.column_name in metrics]
+
+        return res
+
+
+class PerColumnResult(Abstract1DResult, ABC):
+    def __init__(self, results_data: pd.DataFrame, column_names: Union[str, List[str]] = [], *args, **kwargs):
+        super().__init__(results_data)
+        if isinstance(column_names, str):
+            self.column_names = [column_names]
+        elif isinstance(column_names, list):
+            self.column_names = column_names
+        else:
+            raise TypeError("column_names should be either a column name string or a list of strings.")
+
+    def _filter(
+        self,
+        period: str,
+        metrics: Optional[List[str]] = None,
+        column_names: Optional[Union[str, List[str]]] = None,
+        *args,
+        **kwargs,
+    ) -> Self:
+        if isinstance(column_names, str):
+            column_names = [column_names]
+        elif isinstance(column_names, list):
+            pass
+        elif column_names is None:
+            column_names = self.column_names
+        else:
+            raise TypeError("column_names should be either a column name string or a list of strings.")
+
+        res = super()._filter(period, *args, **kwargs)
+
+        data = pd.concat([res.data.loc[:, (['chunk'])], res.data.loc[:, (column_names,)]], axis=1)
+        data = data.reset_index(drop=True)
+
+        res.data = data
+        res.column_names = [c for c in self.column_names if c in column_names]
         return res
 
 
 class Abstract2DResult(AbstractResult, ABC):
-    def __init__(
-        self,
-        results_data: pd.DataFrame,
-        metrics: Sequence[Metric] = (),
-        column_names: List[str] = [],
-        *args,
-        **kwargs
-    ):
+    def __init__(self, results_data: pd.DataFrame, *args, **kwargs):
         super().__init__(results_data)
-        self.metrics = metrics
-        self.column_names = column_names
 
     @property
     def chunk_keys(self) -> pd.Series:
@@ -191,6 +241,14 @@ class Abstract2DResult(AbstractResult, ABC):
         return self.data[('chunk', 'chunk', 'end_date')]
 
     @property
+    def chunk_start_indices(self) -> pd.Series:
+        return self.data[('chunk', 'chunk', 'start_index')]
+
+    @property
+    def chunk_end_indices(self) -> pd.Series:
+        return self.data[('chunk', 'chunk', 'end_index')]
+
+    @property
     def chunk_indices(self) -> pd.Series:
         return self.data[('chunk', 'chunk', 'chunk_index')]
 
@@ -201,26 +259,50 @@ class Abstract2DResult(AbstractResult, ABC):
     def _filter(
         self,
         period: str,
+        *args,
+        **kwargs,
+    ) -> Self:
+        data = self.data
+        if period != 'all':
+            data = data.loc[self.data.loc[:, ('chunk', 'chunk', 'period')] == period, :]
+            data = data.reset_index(drop=True)
+
+        res = copy.deepcopy(self)
+        res.data = data
+
+        return res
+
+
+class PerMetricPerColumnResult(Abstract2DResult, ABC, Generic[MetricLike]):
+    def __init__(
+        self, results_data: pd.DataFrame, metrics: list[MetricLike] = [], column_names: List[str] = [], *args, **kwargs
+    ):
+        super().__init__(results_data)
+        self.metrics = metrics
+        self.column_names = column_names
+
+    def _filter(
+        self,
+        period: str,
         metrics: Optional[List[str]] = None,
         column_names: Optional[List[str]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> Self:
         if metrics is None:
             metrics = [metric.column_name for metric in self.metrics]
         if column_names is None:
             column_names = self.column_names
 
-        data = pd.concat([self.data.loc[:, (['chunk'])], self.data.loc[:, (column_names, metrics)]], axis=1)
-        if period != 'all':
-            data = data.loc[self.data.loc[:, ('chunk', 'chunk', 'period')] == period, :]
+        res = super()._filter(period, *args, **kwargs)
 
+        data = pd.concat([res.data.loc[:, (['chunk'])], res.data.loc[:, (column_names, metrics)]], axis=1)
         data = data.reset_index(drop=True)
 
-        res = copy.deepcopy(self)
         res.data = data
         res.metrics = [metric for metric in self.metrics if metric.column_name in metrics]
         res.column_names = [c for c in self.column_names if c in column_names]
+
         return res
 
 
@@ -343,9 +425,7 @@ class AbstractEstimatorResult(ABC):
             single_level_data.columns = column_names
             return single_level_data
 
-    def filter(
-        self, period: str = 'all', metrics: Optional[Union[str, List[str]]] = None, *args, **kwargs
-    ) -> Self:
+    def filter(self, period: str = 'all', metrics: Optional[Union[str, List[str]]] = None, *args, **kwargs) -> Self:
         """Returns result metric data."""
         if metrics and not isinstance(metrics, (str, list)):
             raise InvalidArgumentsException("metrics value provided is not a valid metric or list of metrics")

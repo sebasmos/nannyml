@@ -5,8 +5,8 @@ Estimating Performance for Regression
 =====================================
 
 This tutorial explains how to use NannyML to estimate the performance of regression
-models in the absence of target data. To find out how DLE estimates performance,
-read the :ref:`explanation of how Direct Loss Estimation works<how-it-works-dle>`.
+models in the absence of target data. To find out how :class:`~nannyml.performance_estimation.direct_loss_estimation.dle.DLE`
+estimates performance, read the :ref:`explanation of how Direct Loss Estimation works<how-it-works-dle>`.
 
 .. note::
     The following example uses :term:`timestamps<Timestamp>`.
@@ -23,14 +23,21 @@ Just The Code
     :path: ./example_notebooks/Tutorial - Estimating Performance - Regression.ipynb
     :cells: 1 3 4 6 8
 
+.. admonition:: **Advanced configuration**
+    :class: hint
+
+    - To learn how :class:`~nannyml.chunk.Chunk` works and to set up custom chunkings check out the :ref:`chunking tutorial <chunking>`
+    - To learn how :class:`~nannyml.thresholds.ConstantThreshold` works and to set up custom threshold check out the :ref:`thresholds tutorial <thresholds>`
+
 
 Walkthrough
 -----------
 
 For simplicity this guide is based on a synthetic dataset included in the library, where the monitored model predicts
-whether the market price of a used car. You can read more about this synthetic dataset :ref:`here<dataset-synthetic-regression>`.
+the market price of a used car. Check out :ref:`Car Price Dataset<dataset-synthetic-regression>` to learn more about this dataset.
 
-In order to monitor a model, NannyML needs to learn about it from a reference dataset.
+
+In order to monitor a model, NannyML needs to learn about it and set expectations from a reference dataset.
 Then it can monitor the data that is subject to actual analysis, provided as the analysis dataset.
 You can read more about this in our section on :ref:`data periods<data-drift-periods>`.
 
@@ -51,7 +58,7 @@ estimator. For the instantiation we need to provide:
 * The list of column names for the features our model uses.
 * The column name for the model output.
 * The column name for the model targets.
-* The list of regression performance metrics we are interested in estimating. Currently the supported metrics are:
+* The list of regression performance metrics we are interested in estimating. Currently, the supported metrics are:
 
   * ``mae`` - mean absolute error
   * ``mape`` - mean absolute percentage error
@@ -60,11 +67,11 @@ estimator. For the instantiation we need to provide:
   * ``msle`` - mean squared logarithmic error
   * ``rmsle`` - root mean squared logarithmic error
 
-* Optionally we can provide a :ref:`chunking<chunking>` specification, otherwise the NannyML default will be used.
-  For more information about :term:`chunking<Data Chunk>` you can check the :ref:`setting up page<chunking>` and :ref:`advanced guide<chunk-data>`.
+* Optionally we can provide a :term:`chunking<Data Chunk>` specification, otherwise the NannyML default will be used.
+  For more information about chunking check out the :ref:`chunking tutorial<chunking>` and it's :ref:`advanced guide<chunk-data>`.
 * Optionally we can provide selected hyperparamters for the model that will make the error estimation. If not, the
   `LGBMRegressor defaults`_ will be used.
-* Optionally we can tell the estimator to use FLAML to perform hyperparamter tuning. By default no hyperparamter tuning is performed.
+* Optionally we can tell the estimator to use `FLAML`_ to perform hyperparamter tuning. By default no hyperparamter tuning is performed.
 * Optionally we can provide `configuration options`_ to perform hyperparamter tuning instead of using the ones set by NannyML.
 
 More information can be found on the API documentation for the :class:`~nannyml.performance_estimation.direct_loss_estimation.dle.DLE` estimator.
@@ -75,7 +82,7 @@ During this tutorial the NannyML default settings are used regarding hyperparame
     :cells: 3
 
 The new :class:`~nannyml.performance_estimation.direct_loss_estimation.dle.DLE` is fitted using the
-:meth:`~nannyml.performance_estimation.direct_loss_estimation.dle.DLE.fit` method on the ``reference`` data.
+:meth:`~nannyml.performance_estimation.direct_loss_estimation.dle.DLE.fit` method on the reference data.
 
 The fitted ``estimator`` can then be used to calculate
 estimated performance metrics on all data which has target values available with the
@@ -90,7 +97,7 @@ NannyML can output a dataframe that contains all the results of the analysis dat
     :path: ./example_notebooks/Tutorial - Estimating Performance - Regression.ipynb
     :cell: 5
 
-There results from the reference data are also available.
+The results from the reference data are also available.
 
 .. nbimport::
     :path: ./example_notebooks/Tutorial - Estimating Performance - Regression.ipynb
@@ -105,33 +112,33 @@ There results from the reference data are also available.
 Apart from chunk-related data, the results data have the following columns for each metric
 that was estimated:
 
- - ``realized_<metric>`` - when ``target`` values are available for a chunk, the realized performance metric will also
+ - **value** - the estimate of a metric for a specific chunk.
+ - **sampling_error** - the estimate of the :term:`Sampling Error`.
+ - **realized** - when **target** values are available for a chunk, the realized performance metric will also
    be calculated and included within the results.
- - ``estimated_<metric>`` - the estimate of a metric for a specific chunk,
- - ``upper_confidence_<metric>`` and ``lower_confidence_<metric>`` - these correspond to the sampling error and are equal to +/-
-   3 times the calculated :term:`standard error<Standard Error>`.
- - ``<metric>_lower_threshold>`` and ``<metric>_upper_threshold>`` - Lower and upper thresholds for performance metric.
-   Crossing them will raise an alert that there is a significant metric change. The thresholds are calculated based
-   on the realized performance of chunks in the ``reference`` period.
-   The thresholds are 3 standard deviations away from the mean performance calculated on ``reference`` chunks.
-   They are calculated during ``fit`` phase.
- - ``alert_<metric>`` - flag indicating potentially significant performance change. ``True`` if estimated performance crosses
+ - **upper_confidence_boundary** and **lower_confidence_boundary** - These values show the :term:`Confidence Band` of the relevant metric
+   and are equal to estimated value +/- 3 times the estimated :term:`Sampling Error`.
+ - **upper_threshold** and **lower_threshold** - crossing these thresholds will raise an alert on significant
+   performance change. The thresholds are calculated based on the actual performance of the monitored model on chunks in
+   the reference partition. By default, the thresholds are 3 standard deviations away from the mean performance calculated on
+   chunks. They are calculated during ``fit`` phase. You can also set up custom thresholds using constant or standard deviations thresholds,
+   to learn more about it check out our :ref:`tutorial on thresholds<thresholds>`.
+ - **alert** - flag indicating potentially significant performance change. ``True`` if estimated performance crosses
    upper or lower threshold.
-
 
 These results can be also plotted. Our plot contains several key elements.
 
 * The purple dashed step plot shows the estimated performance in each chunk of the analysis period. Thick squared point
   markers indicate the middle of these chunks.
 
-* The low-saturated purple area around the estimated performance indicates the :ref:`sampling
-  error<estimation_of_standard_error>`.
+* The black vertical line splits the reference and analysis periods.
+
+* The low-saturated colored area around the estimated performance indicates the :ref:`sampling error<estimation_of_standard_error>`.
 
 * The red horizontal dashed lines show upper and lower thresholds for alerting purposes.
 
-* If the estimated performance crosses the upper or lower threshold an alert is raised which is indicated with a red,
-  low-saturated background in the whole width of the relevant chunk. This is additionally
-  indicated by a red, diamond-shaped point marker in the middle of the chunk.
+* If the estimated performance crosses the upper or lower threshold an alert is raised which is indicated with a red
+  diamond-shaped point marker in the middle of the chunk.
 
 Additional information is shown in the hover (these are interactive plots, though only static views are included here).
 The plots can be created with the following code:
@@ -166,3 +173,4 @@ You can learn more about Direct Error Estimation and its limitations in the
 
 .. _LGBMRegressor defaults: https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMRegressor.html
 .. _configuration options: https://microsoft.github.io/FLAML/docs/reference/automl/automl/#automl-objects
+.. _FLAML: https://microsoft.github.io/FLAML/docs/reference/automl/automl/#automl-objects

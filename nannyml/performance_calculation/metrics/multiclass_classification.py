@@ -39,22 +39,47 @@ from nannyml.sampling_error.multiclass_classification import (
     specificity_sampling_error,
     specificity_sampling_error_components,
 )
+from nannyml.thresholds import Threshold
 
 
 @MetricFactory.register(metric='roc_auc', use_case=ProblemType.CLASSIFICATION_MULTICLASS)
 class MulticlassClassificationAUROC(Metric):
     """Area under Receiver Operating Curve metric."""
 
-    def __init__(self, y_true: str, y_pred: str, y_pred_proba: Optional[Union[str, Dict[str, str]]] = None):
-        """Creates a new AUROC instance."""
+    def __init__(
+        self,
+        y_true: str,
+        y_pred: str,
+        threshold: Threshold,
+        y_pred_proba: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """Creates a new AUROC instance.
+
+        Parameters
+        ----------
+        y_true: str
+            The name of the column containing target values.
+        y_pred: str
+            The name of the column containing your model predictions.
+        threshold: Threshold
+            The Threshold instance that determines how the lower and upper threshold values will be calculated.
+        y_pred_proba: Union[str, Dict[str, str]]
+            Name(s) of the column(s) containing your model output.
+
+                - For binary classification, pass a single string refering to the model output column.
+                - For multiclass classification, pass a dictionary that maps a class string to the column name \
+                containing model outputs for that class.
+        """
         super().__init__(
-            display_name='ROC AUC',
-            column_name='roc_auc',
+            name='roc_auc',
             y_true=y_true,
             y_pred=y_pred,
+            threshold=threshold,
             y_pred_proba=y_pred_proba,
             lower_threshold_limit=0,
             upper_threshold_limit=1,
+            components=[("ROC AUC", "roc_auc")],
         )
         # FIXME: Should we check the y_pred_proba argument here to ensure it's a dict?
         self.y_pred_proba: Dict[str, str]
@@ -113,16 +138,40 @@ class MulticlassClassificationAUROC(Metric):
 class MulticlassClassificationF1(Metric):
     """F1 score metric."""
 
-    def __init__(self, y_true: str, y_pred: str, y_pred_proba: Optional[Union[str, Dict[str, str]]] = None):
-        """Creates a new F1 instance."""
+    def __init__(
+        self,
+        y_true: str,
+        y_pred: str,
+        threshold: Threshold,
+        y_pred_proba: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """Creates a new F1 instance.
+
+        Parameters
+        ----------
+        y_true: str
+            The name of the column containing target values.
+        y_pred: str
+            The name of the column containing your model predictions.
+        threshold: Threshold
+            The Threshold instance that determines how the lower and upper threshold values will be calculated.
+        y_pred_proba: Union[str, Dict[str, str]]
+            Name(s) of the column(s) containing your model output.
+
+                - For binary classification, pass a single string refering to the model output column.
+                - For multiclass classification, pass a dictionary that maps a class string to the column name \
+                containing model outputs for that class.
+        """
         super().__init__(
-            display_name='F1',
-            column_name='f1',
+            name='f1',
             y_true=y_true,
             y_pred=y_pred,
+            threshold=threshold,
             y_pred_proba=y_pred_proba,
             lower_threshold_limit=0,
             upper_threshold_limit=1,
+            components=[("F1", "f1")],
         )
 
         # sampling error
@@ -175,16 +224,40 @@ class MulticlassClassificationF1(Metric):
 class MulticlassClassificationPrecision(Metric):
     """Precision metric."""
 
-    def __init__(self, y_true: str, y_pred: str, y_pred_proba: Optional[Union[str, Dict[str, str]]] = None):
-        """Creates a new Precision instance."""
+    def __init__(
+        self,
+        y_true: str,
+        y_pred: str,
+        threshold: Threshold,
+        y_pred_proba: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """Creates a new Precision instance.
+
+        Parameters
+        ----------
+        y_true: str
+            The name of the column containing target values.
+        y_pred: str
+            The name of the column containing your model predictions.
+        threshold: Threshold
+            The Threshold instance that determines how the lower and upper threshold values will be calculated.
+        y_pred_proba: Union[str, Dict[str, str]]
+            Name(s) of the column(s) containing your model output.
+
+                - For binary classification, pass a single string refering to the model output column.
+                - For multiclass classification, pass a dictionary that maps a class string to the column name \
+                containing model outputs for that class.
+        """
         super().__init__(
-            display_name='Precision',
-            column_name='precision',
+            name='precision',
             y_true=y_true,
             y_pred=y_pred,
+            threshold=threshold,
             y_pred_proba=y_pred_proba,
             lower_threshold_limit=0,
             upper_threshold_limit=1,
+            components=[("Precision", "precision")],
         )
 
         # sampling error
@@ -237,16 +310,40 @@ class MulticlassClassificationPrecision(Metric):
 class MulticlassClassificationRecall(Metric):
     """Recall metric, also known as 'sensitivity'."""
 
-    def __init__(self, y_true: str, y_pred: str, y_pred_proba: Optional[Union[str, Dict[str, str]]] = None):
-        """Creates a new Recall instance."""
+    def __init__(
+        self,
+        y_true: str,
+        y_pred: str,
+        threshold: Threshold,
+        y_pred_proba: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """Creates a new Recall instance.
+
+        Parameters
+        ----------
+        y_true: str
+            The name of the column containing target values.
+        y_pred: str
+            The name of the column containing your model predictions.
+        threshold: Threshold
+            The Threshold instance that determines how the lower and upper threshold values will be calculated.
+        y_pred_proba: Union[str, Dict[str, str]]
+            Name(s) of the column(s) containing your model output.
+
+                - For binary classification, pass a single string refering to the model output column.
+                - For multiclass classification, pass a dictionary that maps a class string to the column name \
+                containing model outputs for that class.
+        """
         super().__init__(
-            display_name='Recall',
-            column_name='recall',
+            name='recall',
             y_true=y_true,
             y_pred=y_pred,
+            threshold=threshold,
             y_pred_proba=y_pred_proba,
             lower_threshold_limit=0,
             upper_threshold_limit=1,
+            components=[("Recall", "recall")],
         )
 
         # sampling error
@@ -299,16 +396,40 @@ class MulticlassClassificationRecall(Metric):
 class MulticlassClassificationSpecificity(Metric):
     """Specificity metric."""
 
-    def __init__(self, y_true: str, y_pred: str, y_pred_proba: Optional[Union[str, Dict[str, str]]] = None):
-        """Creates a new Specificity instance."""
+    def __init__(
+        self,
+        y_true: str,
+        y_pred: str,
+        threshold: Threshold,
+        y_pred_proba: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """Creates a new Specificity instance.
+
+        Parameters
+        ----------
+        y_true: str
+            The name of the column containing target values.
+        y_pred: str
+            The name of the column containing your model predictions.
+        threshold: Threshold
+            The Threshold instance that determines how the lower and upper threshold values will be calculated.
+        y_pred_proba: Union[str, Dict[str, str]]
+            Name(s) of the column(s) containing your model output.
+
+                - For binary classification, pass a single string refering to the model output column.
+                - For multiclass classification, pass a dictionary that maps a class string to the column name \
+                containing model outputs for that class.
+        """
         super().__init__(
-            display_name='Specificity',
-            column_name='specificity',
+            name='specificity',
             y_true=y_true,
             y_pred=y_pred,
+            threshold=threshold,
             y_pred_proba=y_pred_proba,
             lower_threshold_limit=0,
             upper_threshold_limit=1,
+            components=[("Specificity", "specificity")],
         )
 
         # sampling error
@@ -365,16 +486,40 @@ class MulticlassClassificationSpecificity(Metric):
 class MulticlassClassificationAccuracy(Metric):
     """Accuracy metric."""
 
-    def __init__(self, y_true: str, y_pred: str, y_pred_proba: Optional[Union[str, Dict[str, str]]] = None):
-        """Creates a new Accuracy instance."""
+    def __init__(
+        self,
+        y_true: str,
+        y_pred: str,
+        threshold: Threshold,
+        y_pred_proba: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """Creates a new Accuracy instance.
+
+        Parameters
+        ----------
+        y_true: str
+            The name of the column containing target values.
+        y_pred: str
+            The name of the column containing your model predictions.
+        threshold: Threshold
+            The Threshold instance that determines how the lower and upper threshold values will be calculated.
+        y_pred_proba: Union[str, Dict[str, str]]
+            Name(s) of the column(s) containing your model output.
+
+                - For binary classification, pass a single string refering to the model output column.
+                - For multiclass classification, pass a dictionary that maps a class string to the column name \
+                containing model outputs for that class.
+        """
         super().__init__(
-            display_name='Accuracy',
-            column_name='accuracy',
+            name='accuracy',
             y_true=y_true,
             y_pred=y_pred,
+            threshold=threshold,
             y_pred_proba=y_pred_proba,
             lower_threshold_limit=0,
             upper_threshold_limit=1,
+            components=[("Accuracy", "accuracy")],
         )
 
         # sampling error

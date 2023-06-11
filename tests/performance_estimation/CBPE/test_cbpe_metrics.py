@@ -1,22 +1,38 @@
 import pandas as pd
 import pytest
 
+from nannyml.chunk import DefaultChunker
 from nannyml.datasets import (
     load_synthetic_binary_classification_dataset,
     load_synthetic_multiclass_classification_dataset,
 )
 from nannyml.performance_estimation.confidence_based import CBPE
+from nannyml.performance_estimation.confidence_based.metrics import (
+    BinaryClassificationAccuracy,
+    BinaryClassificationAUROC,
+    BinaryClassificationConfusionMatrix,
+    BinaryClassificationF1,
+    BinaryClassificationPrecision,
+    BinaryClassificationRecall,
+    BinaryClassificationSpecificity,
+)
+from nannyml.thresholds import ConstantThreshold
 
 
 @pytest.mark.parametrize(
     'calculator_opts, expected',
     [
         (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': None},
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': None,
+                'business_value_matrix': [[2, -5], [-10, 10]],
+                'normalize_business_value': None,
+            },
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
                     'estimated_f1': [0.9479079222515973, 0.9278089207836576],
                     'estimated_precision': [0.9436121782324026, 0.9197836255005452],
                     'estimated_recall': [0.9522429574319092, 0.9359754933378336],
@@ -26,69 +42,21 @@ from nannyml.performance_estimation.confidence_based import CBPE
                     'estimated_true_negative': [9468.107941981285, 13200.5981195499],
                     'estimated_false_positive': [567.0359356949585, 1267.8197989638852],
                     'estimated_false_negative': [475.8920580187156, 994.4018804500995],
+                    'estimated_business_value': [106231.75626835103, 155489.88045014057],
                 }
             ),
         ),
         (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': 'all'},
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': None,
+                'business_value_matrix': [[2, -5], [-10, 10]],
+                'normalize_business_value': 'per_prediction',
+            },
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
-                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
-                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
-                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
-                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
-                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
-                    'estimated_true_positive': [0.47444820321525205, 0.4845726733678706],
-                    'estimated_true_negative': [0.47340539709906426, 0.44001993731833],
-                    'estimated_false_positive': [0.02835179678474793, 0.04226065996546284],
-                    'estimated_false_negative': [0.02379460290093578, 0.03314672934833665],
-                }
-            ),
-        ),
-        (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': 'true'},
-            pd.DataFrame(
-                {
-                    'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
-                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
-                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
-                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
-                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
-                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
-                    'estimated_true_positive': [0.9522429574319092, 0.9359754933378336],
-                    'estimated_true_negative': [0.9434949869571514, 0.9123732942949082],
-                    'estimated_false_positive': [0.05650501304284861, 0.08762670570509186],
-                    'estimated_false_negative': [0.04775704256809077, 0.06402450666216646],
-                }
-            ),
-        ),
-        (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': 'pred'},
-            pd.DataFrame(
-                {
-                    'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
-                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
-                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
-                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
-                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
-                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
-                    'estimated_true_positive': [0.9436121782324026, 0.9197836255005452],
-                    'estimated_true_negative': [0.952142793843653, 0.9299470320218318],
-                    'estimated_false_positive': [0.05638782176759731, 0.08021637449945493],
-                    'estimated_false_negative': [0.0478572061563471, 0.07005296797816835],
-                }
-            ),
-        ),
-        (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': None, 'timestamp_column_name': 'timestamp'},
-            pd.DataFrame(
-                {
-                    'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
                     'estimated_f1': [0.9479079222515973, 0.9278089207836576],
                     'estimated_precision': [0.9436121782324026, 0.9197836255005452],
                     'estimated_recall': [0.9522429574319092, 0.9359754933378336],
@@ -98,15 +66,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                     'estimated_true_negative': [9468.107941981285, 13200.5981195499],
                     'estimated_false_positive': [567.0359356949585, 1267.8197989638852],
                     'estimated_false_negative': [475.8920580187156, 994.4018804500995],
+                    'estimated_business_value': [5.311587813417551, 5.182996015004686],
                 }
             ),
         ),
         (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': 'all', 'timestamp_column_name': 'timestamp'},
+            {'chunk_size': 20000, 'normalize_confusion_matrix': 'all', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
                     'estimated_f1': [0.9479079222515973, 0.9278089207836576],
                     'estimated_precision': [0.9436121782324026, 0.9197836255005452],
                     'estimated_recall': [0.9522429574319092, 0.9359754933378336],
@@ -116,15 +85,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                     'estimated_true_negative': [0.47340539709906426, 0.44001993731833],
                     'estimated_false_positive': [0.02835179678474793, 0.04226065996546284],
                     'estimated_false_negative': [0.02379460290093578, 0.03314672934833665],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
                 }
             ),
         ),
         (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': 'true', 'timestamp_column_name': 'timestamp'},
+            {'chunk_size': 20000, 'normalize_confusion_matrix': 'true', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
                     'estimated_f1': [0.9479079222515973, 0.9278089207836576],
                     'estimated_precision': [0.9436121782324026, 0.9197836255005452],
                     'estimated_recall': [0.9522429574319092, 0.9359754933378336],
@@ -134,15 +104,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                     'estimated_true_negative': [0.9434949869571514, 0.9123732942949082],
                     'estimated_false_positive': [0.05650501304284861, 0.08762670570509186],
                     'estimated_false_negative': [0.04775704256809077, 0.06402450666216646],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
                 }
             ),
         ),
         (
-            {'chunk_size': 20000, 'normalize_confusion_matrix': 'pred', 'timestamp_column_name': 'timestamp'},
+            {'chunk_size': 20000, 'normalize_confusion_matrix': 'pred', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:49999]'],
-                    'estimated_roc_auc': [0.9690827692140925, 0.9627722759203226],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
                     'estimated_f1': [0.9479079222515973, 0.9278089207836576],
                     'estimated_precision': [0.9436121782324026, 0.9197836255005452],
                     'estimated_recall': [0.9522429574319092, 0.9359754933378336],
@@ -152,19 +123,141 @@ from nannyml.performance_estimation.confidence_based import CBPE
                     'estimated_true_negative': [0.952142793843653, 0.9299470320218318],
                     'estimated_false_positive': [0.05638782176759731, 0.08021637449945493],
                     'estimated_false_negative': [0.0478572061563471, 0.07005296797816835],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': None},
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': None,
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
+            pd.DataFrame(
+                {
+                    'key': ['[0:19999]', '[20000:49999]'],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
+                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
+                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
+                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
+                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
+                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
+                    'estimated_true_positive': [9488.96406430504, 14537.180201036117],
+                    'estimated_true_negative': [9468.107941981285, 13200.5981195499],
+                    'estimated_false_positive': [567.0359356949585, 1267.8197989638852],
+                    'estimated_false_negative': [475.8920580187156, 994.4018804500995],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
+                }
+            ),
+        ),
+        (
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': 'all',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
+            pd.DataFrame(
+                {
+                    'key': ['[0:19999]', '[20000:49999]'],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
+                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
+                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
+                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
+                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
+                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
+                    'estimated_true_positive': [0.47444820321525205, 0.4845726733678706],
+                    'estimated_true_negative': [0.47340539709906426, 0.44001993731833],
+                    'estimated_false_positive': [0.02835179678474793, 0.04226065996546284],
+                    'estimated_false_negative': [0.02379460290093578, 0.03314672934833665],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
+                }
+            ),
+        ),
+        (
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': 'all',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[2, -5], [-10, 10]],
+                'normalize_business_value': 'per_prediction',
+            },
+            pd.DataFrame(
+                {
+                    'key': ['[0:19999]', '[20000:49999]'],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
+                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
+                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
+                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
+                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
+                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
+                    'estimated_true_positive': [0.47444820321525205, 0.4845726733678706],
+                    'estimated_true_negative': [0.47340539709906426, 0.44001993731833],
+                    'estimated_false_positive': [0.02835179678474793, 0.04226065996546284],
+                    'estimated_false_negative': [0.02379460290093578, 0.03314672934833665],
+                    'estimated_business_value': [5.311587813417551, 5.182996015004686],
+                }
+            ),
+        ),
+        (
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': 'true',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
+            pd.DataFrame(
+                {
+                    'key': ['[0:19999]', '[20000:49999]'],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
+                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
+                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
+                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
+                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
+                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
+                    'estimated_true_positive': [0.9522429574319092, 0.9359754933378336],
+                    'estimated_true_negative': [0.9434949869571514, 0.9123732942949082],
+                    'estimated_false_positive': [0.05650501304284861, 0.08762670570509186],
+                    'estimated_false_negative': [0.04775704256809077, 0.06402450666216646],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
+                }
+            ),
+        ),
+        (
+            {
+                'chunk_size': 20000,
+                'normalize_confusion_matrix': 'pred',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
+            pd.DataFrame(
+                {
+                    'key': ['[0:19999]', '[20000:49999]'],
+                    'estimated_roc_auc': [0.9711057564966745, 0.9636286015592977],
+                    'estimated_f1': [0.9479079222515973, 0.9278089207836576],
+                    'estimated_precision': [0.9436121782324026, 0.9197836255005452],
+                    'estimated_recall': [0.9522429574319092, 0.9359754933378336],
+                    'estimated_specificity': [0.9434949869571513, 0.9123732942949082],
+                    'estimated_accuracy': [0.9478536003143163, 0.9245926106862006],
+                    'estimated_true_positive': [0.9436121782324026, 0.9197836255005452],
+                    'estimated_true_negative': [0.952142793843653, 0.9299470320218318],
+                    'estimated_false_positive': [0.05638782176759731, 0.08021637449945493],
+                    'estimated_false_negative': [0.0478572061563471, 0.07005296797816835],
+                    'estimated_business_value': [-79304.54024949206, -116471.5454883825],
+                }
+            ),
+        ),
+        (
+            {'chunk_number': 4, 'normalize_confusion_matrix': None, 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -210,19 +303,25 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         438.1716563946605,
                         436.2496150755182,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': 'all'},
+            {'chunk_number': 4, 'normalize_confusion_matrix': 'all', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -268,19 +367,25 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.03505373251157284,
                         0.03489996920604146,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': 'true'},
+            {'chunk_number': 4, 'normalize_confusion_matrix': 'true', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -326,19 +431,25 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.06721362499796762,
                         0.06715668518185315,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': 'pred'},
+            {'chunk_number': 4, 'normalize_confusion_matrix': 'pred', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -384,19 +495,30 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.074888336420212,
                         0.0742047312596561,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': None, 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_number': 4,
+                'normalize_confusion_matrix': None,
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -442,19 +564,30 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         438.1716563946605,
                         436.2496150755182,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': 'all', 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_number': 4,
+                'normalize_confusion_matrix': 'all',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -500,19 +633,30 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.03505373251157284,
                         0.03489996920604146,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': 'true', 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_number': 4,
+                'normalize_confusion_matrix': 'true',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -558,19 +702,30 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.06721362499796762,
                         0.06715668518185315,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_number': 4, 'normalize_confusion_matrix': 'pred', 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_number': 4,
+                'normalize_confusion_matrix': 'pred',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['[0:12499]', '[12500:24999]', '[25000:37499]', '[37500:49999]'],
                     'estimated_roc_auc': [
-                        0.9690496133543502,
-                        0.9690315182120458,
-                        0.9607404611197395,
-                        0.9611281635643135,
+                        0.9710577647083807,
+                        0.9711638319733471,
+                        0.9614012753095441,
+                        0.9617878072895653,
                     ],
                     'estimated_f1': [0.9478220802546018, 0.9483683062849226, 0.9235839411719146, 0.9239534478264141],
                     'estimated_precision': [
@@ -616,20 +771,31 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.074888336420212,
                         0.0742047312596561,
                     ],
+                    'estimated_business_value': [
+                        -49727.81974240482,
+                        -49580.07308793498,
+                        -48282.472681700856,
+                        -48185.720225833895,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_period': 'Y', 'normalize_confusion_matrix': None, 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_period': 'Y',
+                'normalize_confusion_matrix': None,
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['2017', '2018', '2019', '2020', '2021'],
                     'estimated_roc_auc': [
-                        0.9686251180452822,
-                        0.9691860189228905,
-                        0.9643157928165687,
-                        0.9610299125179039,
-                        0.8947719335229752,
+                        0.970765243491131,
+                        0.9711789504176722,
+                        0.96539407871315,
+                        0.9616920614348379,
+                        0.9225012697206918,
                     ],
                     'estimated_f1': [
                         0.9486231864324036,
@@ -694,20 +860,32 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         521.6560850289168,
                         0.32608873091890567,
                     ],
+                    'estimated_business_value': [
+                        -20338.398573054783,
+                        -59094.1113577804,
+                        -58485.756007938144,
+                        -57836.67340348189,
+                        -21.14639561932603,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_period': 'Y', 'normalize_confusion_matrix': 'all', 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_period': 'Y',
+                'normalize_confusion_matrix': 'all',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['2017', '2018', '2019', '2020', '2021'],
                     'estimated_roc_auc': [
-                        0.9686251180452822,
-                        0.9691860189228905,
-                        0.9643157928165687,
-                        0.9610299125179039,
-                        0.8947719335229752,
+                        0.970765243491131,
+                        0.9711789504176722,
+                        0.96539407871315,
+                        0.9616920614348379,
+                        0.9225012697206918,
                     ],
                     'estimated_f1': [
                         0.9486231864324036,
@@ -772,20 +950,32 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.034837457261180496,
                         0.03260887309189057,
                     ],
+                    'estimated_business_value': [
+                        -20338.398573054783,
+                        -59094.1113577804,
+                        -58485.756007938144,
+                        -57836.67340348189,
+                        -21.14639561932603,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_period': 'Y', 'normalize_confusion_matrix': 'true', 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_period': 'Y',
+                'normalize_confusion_matrix': 'true',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['2017', '2018', '2019', '2020', '2021'],
                     'estimated_roc_auc': [
-                        0.9686251180452822,
-                        0.9691860189228905,
-                        0.9643157928165687,
-                        0.9610299125179039,
-                        0.8947719335229752,
+                        0.970765243491131,
+                        0.9711789504176722,
+                        0.96539407871315,
+                        0.9616920614348379,
+                        0.9225012697206918,
                     ],
                     'estimated_f1': [
                         0.9486231864324036,
@@ -850,20 +1040,32 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.06690225009652676,
                         0.10299094856037092,
                     ],
+                    'estimated_business_value': [
+                        -20338.398573054783,
+                        -59094.1113577804,
+                        -58485.756007938144,
+                        -57836.67340348189,
+                        -21.14639561932603,
+                    ],
                 }
             ),
         ),
         (
-            {'chunk_period': 'Y', 'normalize_confusion_matrix': 'pred', 'timestamp_column_name': 'timestamp'},
+            {
+                'chunk_period': 'Y',
+                'normalize_confusion_matrix': 'pred',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': ['2017', '2018', '2019', '2020', '2021'],
                     'estimated_roc_auc': [
-                        0.9686251180452822,
-                        0.9691860189228905,
-                        0.9643157928165687,
-                        0.9610299125179039,
-                        0.8947719335229752,
+                        0.970765243491131,
+                        0.9711789504176722,
+                        0.96539407871315,
+                        0.9616920614348379,
+                        0.9225012697206918,
                     ],
                     'estimated_f1': [
                         0.9486231864324036,
@@ -928,11 +1130,18 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.07426766586402574,
                         0.054348121819817616,
                     ],
+                    'estimated_business_value': [
+                        -20338.398573054783,
+                        -59094.1113577804,
+                        -58485.756007938144,
+                        -57836.67340348189,
+                        -21.14639561932603,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': None},
+            {'normalize_confusion_matrix': None, 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': [
@@ -948,16 +1157,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1067,11 +1276,23 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         176.37969145227322,
                         171.65749117130238,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': 'all'},
+            {'normalize_confusion_matrix': 'all', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': [
@@ -1087,16 +1308,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1206,11 +1427,23 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.035275938290454646,
                         0.034331498234260474,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': 'true'},
+            {'normalize_confusion_matrix': 'true', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': [
@@ -1226,16 +1459,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1345,11 +1578,23 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.06890732957303593,
                         0.06450562744593023,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': 'pred'},
+            {'normalize_confusion_matrix': 'pred', 'business_value_matrix': [[-1, 4], [8, -8]]},
             pd.DataFrame(
                 {
                     'key': [
@@ -1365,16 +1610,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1484,11 +1729,27 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.07343034614998886,
                         0.07535447373630481,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': None, 'timestamp_column_name': 'timestamp'},
+            {
+                'normalize_confusion_matrix': None,
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': [
@@ -1504,16 +1765,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1623,11 +1884,27 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         176.37969145227322,
                         171.65749117130238,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': 'all', 'timestamp_column_name': 'timestamp'},
+            {
+                'normalize_confusion_matrix': 'all',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': [
@@ -1643,16 +1920,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1762,11 +2039,27 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.035275938290454646,
                         0.034331498234260474,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': 'true', 'timestamp_column_name': 'timestamp'},
+            {
+                'normalize_confusion_matrix': 'true',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': [
@@ -1782,16 +2075,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -1901,11 +2194,27 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.06890732957303593,
                         0.06450562744593023,
                     ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
+                    ],
                 }
             ),
         ),
         (
-            {'normalize_confusion_matrix': 'pred', 'timestamp_column_name': 'timestamp'},
+            {
+                'normalize_confusion_matrix': 'pred',
+                'timestamp_column_name': 'timestamp',
+                'business_value_matrix': [[-1, 4], [8, -8]],
+            },
             pd.DataFrame(
                 {
                     'key': [
@@ -1921,16 +2230,16 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         '[45000:49999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9686306166809373,
-                        0.9690438435474089,
-                        0.9694438261961335,
-                        0.9690472634498744,
-                        0.9688726952274674,
-                        0.960478016244988,
-                        0.9611336210051199,
-                        0.9605358219511105,
-                        0.9618691204348024,
-                        0.9605366452565602,
+                        0.9707549113643061,
+                        0.9710224276197865,
+                        0.9714183710230127,
+                        0.9711031289261209,
+                        0.9711345926265325,
+                        0.9611051833769545,
+                        0.9618393909078314,
+                        0.9610884839447085,
+                        0.9625480927168266,
+                        0.9613306854392768,
                     ],
                     'estimated_f1': [
                         0.948555321454138,
@@ -2039,40 +2348,54 @@ from nannyml.performance_estimation.confidence_based import CBPE
                         0.0739349563092676,
                         0.07343034614998886,
                         0.07535447373630481,
+                    ],
+                    'estimated_business_value': [
+                        -20518.99288114649,
+                        -19531.34562601404,
+                        -19647.162691868405,
+                        -19607.039050463114,
+                        -20003.352580847743,
+                        -19282.218574708404,
+                        -19266.462434034747,
+                        -19178.81937748659,
+                        -19022.008517144695,
+                        -19718.684004160303,
                     ],
                 }
             ),
         ),
     ],
     ids=[
-        'size_based_without_timestamp_normalization_none',
-        'size_based_without_timestamp_normalization_all',
-        'size_based_without_timestamp_normalization_true',
-        'size_based_without_timestamp_normalization_pred',
-        'sized_based_with_timestamp_normalization_none',
-        'sized_based_with_timestamp_normalization_all',
-        'sized_based_with_timestamp_normalization_true',
-        'sized_based_with_timestamp_normalization_pred',
-        'count_based_without_timestamp_normalization_none',
-        'count_based_without_timestamp_normalization_all',
-        'count_based_without_timestamp_normalization_true',
-        'count_based_without_timestamp_normalization_pred',
-        'count_based_with_timestamp_normalization_none',
-        'count_based_with_timestamp_normalization_all',
-        'count_based_with_timestamp_normalization_true',
-        'count_based_with_timestamp_normalization_pred',
-        'period_based_with_timestamp_normalization_none',
-        'period_based_with_timestamp_normalization_all',
-        'period_based_with_timestamp_normalization_true',
-        'period_based_with_timestamp_normalization_pred',
-        'default_without_timestamp_normalization_none',
-        'default_without_timestamp_normalization_all',
-        'default_without_timestamp_normalization_true',
-        'default_without_timestamp_normalization_pred',
-        'default_with_timestamp_normalization_none',
-        'default_with_timestamp_normalization_all',
-        'default_with_timestamp_normalization_true',
-        'default_with_timestamp_normalization_pred',
+        'size_based_without_timestamp_cm_normalization_none_business_norm_none',
+        'size_based_without_timestamp_cm_normalization_none_business_norm_per_pred',
+        'size_based_without_timestamp_normalization_all_business_norm_none',
+        'size_based_without_timestamp_normalization_true_business_norm_none',
+        'size_based_without_timestamp_normalization_pred_business_norm_none',
+        'sized_based_with_timestamp_cm_normalization_none_business_norm_none',
+        'sized_based_with_timestamp_cm_normalization_all_business_norm_none',
+        'sized_based_with_timestamp_cm_normalization_all_business_norm_per_pred',
+        'sized_based_with_timestamp_normalization_true_business_norm_none',
+        'sized_based_with_timestamp_normalization_pred_business_norm_none',
+        'count_based_without_timestamp_normalization_none_business_norm_none',
+        'count_based_without_timestamp_normalization_all_business_norm_none',
+        'count_based_without_timestamp_normalization_true_business_norm_none',
+        'count_based_without_timestamp_normalization_pred_business_norm_none',
+        'count_based_with_timestamp_normalization_none_business_norm_none',
+        'count_based_with_timestamp_normalization_all_business_norm_none',
+        'count_based_with_timestamp_normalization_true_business_norm_none',
+        'count_based_with_timestamp_normalization_pred_business_norm_none',
+        'period_based_with_timestamp_normalization_none_business_norm_none',
+        'period_based_with_timestamp_normalization_all_business_norm_none',
+        'period_based_with_timestamp_normalization_true_business_norm_none',
+        'period_based_with_timestamp_normalization_pred_business_norm_none',
+        'default_without_timestamp_normalization_none_business_norm_none',
+        'default_without_timestamp_normalization_all_business_norm_none',
+        'default_without_timestamp_normalization_true_business_norm_none',
+        'default_without_timestamp_normalization_pred_business_norm_none',
+        'default_with_timestamp_normalization_none_business_norm_none',
+        'default_with_timestamp_normalization_all_business_norm_none',
+        'default_with_timestamp_normalization_true_business_norm_none',
+        'default_with_timestamp_normalization_pred_business_norm_none',
     ],
 )
 def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expected):
@@ -2082,15 +2405,22 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
         y_pred='y_pred',
         y_true='work_home_actual',
         problem_type='classification_binary',
-        metrics=['roc_auc', 'f1', 'precision', 'recall', 'specificity', 'accuracy', 'confusion_matrix'],
+        metrics=[
+            'roc_auc',
+            'f1',
+            'precision',
+            'recall',
+            'specificity',
+            'accuracy',
+            'confusion_matrix',
+            'business_value',
+        ],
         **calculator_opts,
     ).fit(ref_df)
     result = cbpe.estimate(ana_df)
 
     metric_column_names = [name for metric in result.metrics for name in metric.column_names]
-    sut = result.filter(period='analysis').to_df()[
-        [('chunk', 'key')] + [(c, 'value') for c in metric_column_names]
-    ]  # Need to change
+    sut = result.filter(period='analysis').to_df()[[('chunk', 'key')] + [(c, 'value') for c in metric_column_names]]
     sut.columns = [
         'key',
         'estimated_roc_auc',
@@ -2103,6 +2433,7 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
         'estimated_true_negative',
         'estimated_false_positive',
         'estimated_false_negative',
+        'estimated_business_value',
     ]
 
     pd.testing.assert_frame_equal(expected, sut)
@@ -2116,7 +2447,7 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:39999]', '[40000:59999]'],
-                    'estimated_roc_auc': [0.9092377595865466, 0.8683877226653395, 0.8204766170638091],
+                    'estimated_roc_auc': [0.9092530048158975, 0.8684079311351537, 0.8205039807439959],
                     'estimated_f1': [0.756401608336434, 0.6937135623882767, 0.632386421613214],
                     'estimated_precision': [0.7564437378390059, 0.694174192229447, 0.6336288859123612],
                     'estimated_recall': [0.7564129287764665, 0.6934788458355289, 0.6319310599943714],
@@ -2130,7 +2461,7 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
             pd.DataFrame(
                 {
                     'key': ['[0:19999]', '[20000:39999]', '[40000:59999]'],
-                    'estimated_roc_auc': [0.9092377595865466, 0.8683877226653395, 0.8204766170638091],
+                    'estimated_roc_auc': [0.9092530048158975, 0.8684079311351537, 0.8205039807439959],
                     'estimated_f1': [0.756401608336434, 0.6937135623882767, 0.632386421613214],
                     'estimated_precision': [0.7564437378390059, 0.694174192229447, 0.6336288859123612],
                     'estimated_recall': [0.7564129287764665, 0.6934788458355289, 0.6319310599943714],
@@ -2144,12 +2475,7 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
             pd.DataFrame(
                 {
                     'key': ['[0:14999]', '[15000:29999]', '[30000:44999]', '[45000:59999]'],
-                    'estimated_roc_auc': [
-                        0.9085083182636969,
-                        0.9088360564807361,
-                        0.8196861857675541,
-                        0.8203213219880933,
-                    ],
+                    'estimated_roc_auc': [0.9085282712524355, 0.908855836626517, 0.8197227941098104, 0.820357813099581],
                     'estimated_f1': [0.7550059244451006, 0.7562711250144366, 0.63091155676697, 0.6324244687112559],
                     'estimated_precision': [
                         0.755038246904623,
@@ -2183,12 +2509,7 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
             pd.DataFrame(
                 {
                     'key': ['[0:14999]', '[15000:29999]', '[30000:44999]', '[45000:59999]'],
-                    'estimated_roc_auc': [
-                        0.9085083182636969,
-                        0.9088360564807361,
-                        0.8196861857675541,
-                        0.8203213219880933,
-                    ],
+                    'estimated_roc_auc': [0.9085282712524355, 0.908855836626517, 0.8197227941098104, 0.820357813099581],
                     'estimated_f1': [0.7550059244451006, 0.7562711250144366, 0.63091155676697, 0.6324244687112559],
                     'estimated_precision': [
                         0.755038246904623,
@@ -2222,7 +2543,7 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
             pd.DataFrame(
                 {
                     'key': ['2020', '2021'],
-                    'estimated_roc_auc': [0.8698976466237168, 0.8161798350988554],
+                    'estimated_roc_auc': [0.8699046556903727, 0.8174976659905601],
                     'estimated_f1': [0.6959459683194374, 0.6271637037915178],
                     'estimated_precision': [0.696279612597813, 0.6275707355339551],
                     'estimated_recall': [0.6957620347508907, 0.6272720458900231],
@@ -2248,16 +2569,16 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
                         '[54000:59999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9070370295881952,
-                        0.9099482873688786,
-                        0.909958298321231,
-                        0.9091054631936624,
-                        0.9071886074481345,
-                        0.8195150939735344,
-                        0.8202573402661897,
-                        0.819127271546289,
-                        0.81940620684774,
-                        0.8215839856335078,
+                        0.9070850078291697,
+                        0.9099949916410729,
+                        0.9100049015532864,
+                        0.9091525470654199,
+                        0.9072366448743271,
+                        0.8196065429712586,
+                        0.8203484506082215,
+                        0.8192193154831209,
+                        0.8194977218687874,
+                        0.8216746926871311,
                     ],
                     'estimated_f1': [
                         0.7533014808638749,
@@ -2339,16 +2660,16 @@ def test_cbpe_for_binary_classification_with_timestamps(calculator_opts, expecte
                         '[54000:59999]',
                     ],
                     'estimated_roc_auc': [
-                        0.9070370295881952,
-                        0.9099482873688786,
-                        0.909958298321231,
-                        0.9091054631936624,
-                        0.9071886074481345,
-                        0.8195150939735344,
-                        0.8202573402661897,
-                        0.819127271546289,
-                        0.81940620684774,
-                        0.8215839856335078,
+                        0.9070850078291697,
+                        0.9099949916410729,
+                        0.9100049015532864,
+                        0.9091525470654199,
+                        0.9072366448743271,
+                        0.8196065429712586,
+                        0.8203484506082215,
+                        0.8192193154831209,
+                        0.8194977218687874,
+                        0.8216746926871311,
                     ],
                     'estimated_f1': [
                         0.7533014808638749,
@@ -2451,3 +2772,38 @@ def test_cbpe_for_multiclass_classification_with_timestamps(calculator_opts, exp
     ]
 
     pd.testing.assert_frame_equal(expected, sut)
+
+
+@pytest.mark.parametrize(
+    'metric_cls',
+    [
+        BinaryClassificationAUROC,
+        BinaryClassificationF1,
+        BinaryClassificationPrecision,
+        BinaryClassificationRecall,
+        BinaryClassificationSpecificity,
+        BinaryClassificationAccuracy,
+        BinaryClassificationConfusionMatrix,
+    ],
+)
+def test_method_logs_warning_when_lower_threshold_is_overridden_by_metric_limits(caplog, metric_cls):
+    reference, _, _ = load_synthetic_binary_classification_dataset()
+
+    # TODO: move this from CBPE to metrics
+    # workaround to deal with functionality outside of Metrics classes
+    reference['uncalibrated_y_pred_proba'] = reference['y_pred_proba']
+
+    metric = metric_cls(
+        y_pred_proba='y_pred_proba',
+        y_pred='y_pred',
+        y_true='work_home_actual',
+        problem_type='classification_binary',
+        chunker=DefaultChunker(),
+        threshold=ConstantThreshold(lower=-1),
+    )
+    metric.fit(reference)
+
+    assert (
+        f'{metric.display_name} lower threshold value -1 overridden by '
+        f'lower threshold value limit {metric.lower_threshold_value_limit}' in caplog.messages
+    )

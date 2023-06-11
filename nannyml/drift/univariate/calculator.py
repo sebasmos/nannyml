@@ -2,10 +2,34 @@
 #
 #  License: Apache Software License 2.0
 
-"""Calculates drift for individual features using the `Kolmogorov-Smirnov` and `chi2-contingency` statistical tests."""
+"""Calculates drift for individual columns.
+
+Supported drift detection methods are:
+
+- Kolmogorov-Smirnov statistic (continuous)
+- Wasserstein distance (continuous)
+- Chi-squared statistic (categorical)
+- L-infinity distance (categorical)
+- Jensen-Shannon distance
+- Hellinger distance
+
+For more information, check out the `tutorial`_ or the `deep dive`_.
+
+For help selecting the correct univariate drift detection method for your use case, check the `method selection guide`_.
+
+.. _tutorial:
+    https://nannyml.readthedocs.io/en/stable/tutorials/detecting_data_drift/univariate_drift_detection.html
+
+.. _deep dive:
+    https://nannyml.readthedocs.io/en/stable/how_it_works/univariate_drift_detection.html
+
+.. _method selection guide:
+    https://nannyml.readthedocs.io/en/stable/how_it_works/univariate_drift_comparison.html
+"""
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
@@ -16,7 +40,17 @@ from nannyml.chunk import Chunker
 from nannyml.drift.univariate.methods import FeatureType, Method, MethodFactory
 from nannyml.drift.univariate.result import Result
 from nannyml.exceptions import InvalidArgumentsException
+from nannyml.thresholds import ConstantThreshold, StandardDeviationThreshold, Threshold
 from nannyml.usage_logging import UsageEvent, log_usage
+
+DEFAULT_THRESHOLDS: Dict[str, Threshold] = {
+    'kolmogorov_smirnov': StandardDeviationThreshold(std_lower_multiplier=None),
+    'chi2': StandardDeviationThreshold(),  # currently ignored
+    'jensen_shannon': ConstantThreshold(lower=None, upper=0.1),
+    'wasserstein': StandardDeviationThreshold(std_lower_multiplier=None),
+    'hellinger': ConstantThreshold(lower=None, upper=0.1),
+    'l_infinity': ConstantThreshold(lower=None, upper=0.1),
+}
 
 
 class UnivariateDriftCalculator(AbstractCalculator):
@@ -25,6 +59,7 @@ class UnivariateDriftCalculator(AbstractCalculator):
     def __init__(
         self,
         column_names: Union[str, List[str]],
+        treat_as_categorical: Optional[Union[str, List[str]]] = None,
         timestamp_column_name: Optional[str] = None,
         categorical_methods: Optional[Union[str, List[str]]] = None,
         continuous_methods: Optional[Union[str, List[str]]] = None,
@@ -32,6 +67,7 @@ class UnivariateDriftCalculator(AbstractCalculator):
         chunk_number: Optional[int] = None,
         chunk_period: Optional[str] = None,
         chunker: Optional[Chunker] = None,
+        thresholds: Optional[Dict[str, Threshold]] = None,
         computation_params: Optional[dict[str, Any]] = None,
     ):
         """Creates a new UnivariateDriftCalculator instance.
@@ -41,12 +77,26 @@ class UnivariateDriftCalculator(AbstractCalculator):
         column_names: Union[str, List[str]]
             A string or list containing the names of features in the provided data set.
             A drift score will be calculated for each entry in this list.
+        treat_as_categorical: Union[str, List[str]]
+            A single column name or list of column names to be treated as categorical by the calculator.
         timestamp_column_name: str
             The name of the column containing the timestamp of the model prediction.
         categorical_methods: Union[str, List[str]], default=['jensen_shannon']
             A method name or list of method names that will be performed on categorical columns.
+            Supported methods for categorical variables:
+
+                - `jensen_shannon`
+                - `chi2`
+                - `hellinger`
+                - `l_infinity`
         continuous_methods: Union[str, List[str]], default=['jensen_shannon']
-            A a method name list of method names that will be performed on continuous columns.
+            A method name list of method names that will be performed on continuous columns.
+            Supported methods for continuous variables:
+
+                - `jensen_shannon`
+                - `kolmogorov_smirnov`
+                - `hellinger`
+                - `wasserstein`
         chunk_size: int
             Splits the data into chunks containing `chunks_size` observations.
             Only one of `chunk_size`, `chunk_number` or `chunk_period` should be given.
@@ -58,21 +108,62 @@ class UnivariateDriftCalculator(AbstractCalculator):
             Only one of `chunk_size`, `chunk_number` or `chunk_period` should be given.
         chunker : Chunker
             The `Chunker` used to split the data sets into a lists of chunks.
-        computation_params : dict, default={'kolmogorov_smirnov':{'calculation_method':{'auto', 'exact', 'estimated},
-            'n_bins':10 000}, 'wasserstein':{'calculation_method':{'auto', 'exact', 'estimated}, 'n_bins':10 000}}
+        thresholds: dict
+
+            Defaults to::
+
+                {
+                    'kolmogorov_smirnov': StandardDeviationThreshold(std_lower_multiplier=None),
+                    'jensen_shannon': ConstantThreshold(upper=0.1),
+                    'wasserstein': StandardDeviationThreshold(std_lower_multiplier=None),
+                    'hellinger': ConstantThreshold(upper=0.1),
+                    'l_infinity': ConstantThreshold(upper=0.1)
+                }
+
+            A dictionary allowing users to set a custom threshold for each method. It links a `Threshold` subclass
+            to a method name. This dictionary is optional.
+            When a dictionary is given its values will override the default values. If no dictionary is given a default
+            will be applied. The default method thresholds are as follows:
+
+                - `kolmogorov_smirnov`: `StandardDeviationThreshold(std_lower_multiplier=None)`
+                - `jensen_shannon`: `ConstantThreshold(upper=0.1)`
+                - `wasserstein`: `StandardDeviationThreshold(std_lower_multiplier=None)`
+                - `hellinger`: `ConstantThreshold(upper=0.1)`
+                - `l_infinity`: `ConstantThreshold(upper=0.1)`
+
+            The `chi2` method does not support custom thresholds for now. Additional research is required to determine
+            how to transition from its current p-value based implementation.
+
+        computation_params : dict
+
+            Defaults to::
+
+                {
+                    'kolmogorov_smirnov': {
+                        'calculation_method': 'auto',
+                        'n_bins':10 000
+                    },
+                    'wasserstein': {
+                        'calculation_method': 'auto',
+                        'n_bins':10 000
+                    }
+                }
 
             A dictionary which allows users to specify whether they want drift calculated on
             the exact reference data or an estimated distribution of the reference data obtained
             using binning techniques. Applicable only to Kolmogorov-Smirnov and Wasserstein.
 
-            `calculation_method` : Specify whether the entire or the binned reference data will be stored.
+            `calculation_method`: Specify whether the entire or the binned reference data will be stored.
+
                 The default value is `auto`.
 
                 - `auto` : Use `exact` for reference data smaller than 10 000 rows, `estimated` for larger.
                 - `exact` : Store the whole reference data.
+
                     When calculating on chunk `scipy.stats.ks_2samp(reference, chunk,  method = `exact` )`
                     is called and whole reference and chunk vectors are passed.
                 - `estimated` : Store reference data binned into `n_bins` (default=10 000).
+
                     The D-statistic will be calculated based on binned eCDF.
                     Bins are quantile-based for Kolmogorov-Smirnov and equal-width based for Wasserstein.
                     Notice that for the reference data of 10 000 rows the resulting D-statistic for exact and
@@ -80,6 +171,7 @@ class UnivariateDriftCalculator(AbstractCalculator):
                     distribution of test statistic (as it is in the `scipy.stats.ks_2samp` with method = `asymp` ).
 
             `n_bins` : Number of bins used to bin data when calculation_method = `estimated`.
+
                 The default value is 10 000. The larger the value the more precise the calculation
                 (closer to  calculation_method = `exact` ) but more data will be stored in the fitted calculator.
 
@@ -112,6 +204,12 @@ class UnivariateDriftCalculator(AbstractCalculator):
             column_names = [column_names]
         self.column_names = column_names
 
+        if not treat_as_categorical:
+            treat_as_categorical = []
+        if isinstance(treat_as_categorical, str):
+            treat_as_categorical = [treat_as_categorical]
+        self.treat_as_categorical = treat_as_categorical
+
         if not continuous_methods:
             continuous_methods = ['jensen_shannon']
         elif isinstance(continuous_methods, str):
@@ -125,6 +223,17 @@ class UnivariateDriftCalculator(AbstractCalculator):
         self.categorical_method_names: List[str] = categorical_methods
 
         self.computation_params: Optional[Dict[str, Any]] = computation_params
+
+        # Setting thresholds: update default values with custom values if given
+        self.thresholds = DEFAULT_THRESHOLDS
+        if thresholds is not None:
+            if 'chi2' in thresholds:
+                msg = "ignoring custom threshold for 'chi2' as it does not support custom thresholds for now."
+                self._logger.warning(msg)
+                warnings.warn(msg)
+
+                # thresholds.pop('chi2')  # chi2 has no custom threshold support for now
+            self.thresholds.update(**thresholds)
 
         # set to default values within the method function in methods.py
 
@@ -150,24 +259,41 @@ class UnivariateDriftCalculator(AbstractCalculator):
             reference_data, self.column_names
         )
 
+        for column_name in self.treat_as_categorical:
+            if column_name not in self.column_names:
+                self._logger.info(
+                    f"ignoring 'treat_as_categorical' value '{column_name}' because it was not in "
+                    f"listed column names"
+                )
+                break
+            if column_name in self.continuous_column_names:
+                self.continuous_column_names.remove(column_name)
+            if column_name not in self.categorical_column_names:
+                self.categorical_column_names.append(column_name)
+
         for column_name in self.continuous_column_names:
             self._column_to_models_mapping[column_name] += [
                 MethodFactory.create(
                     key=method,
                     feature_type=FeatureType.CONTINUOUS,
                     chunker=self.chunker,
-                    computation_params=self.computation_params,
+                    computation_params=self.computation_params or {},
+                    threshold=self.thresholds[method],
                 ).fit(
                     reference_data=reference_data[column_name],
                     timestamps=reference_data[self.timestamp_column_name] if self.timestamp_column_name else None,
                 )
                 for method in self.continuous_method_names
             ]
-        print('161', self._column_to_models_mapping)
 
         for column_name in self.categorical_column_names:
             self._column_to_models_mapping[column_name] += [
-                MethodFactory.create(key=method, feature_type=FeatureType.CATEGORICAL, chunker=self.chunker).fit(
+                MethodFactory.create(
+                    key=method,
+                    feature_type=FeatureType.CATEGORICAL,
+                    chunker=self.chunker,
+                    threshold=self.thresholds[method],
+                ).fit(
                     reference_data=reference_data[column_name],
                     timestamps=reference_data[self.timestamp_column_name] if self.timestamp_column_name else None,
                 )
@@ -253,9 +379,9 @@ def _calculate_for_column(data: pd.DataFrame, column_name: str, method: Method) 
     result = {}
     value = method.calculate(data[column_name])
     result['value'] = value
-    result['upper_threshold'] = method.upper_threshold
-    result['lower_threshold'] = method.lower_threshold
-    result['alert'] = method.alert(data[column_name])
+    result['upper_threshold'] = method.upper_threshold_value
+    result['lower_threshold'] = method.lower_threshold_value
+    result['alert'] = method.alert(value)
     return result
 
 

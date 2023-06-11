@@ -1,7 +1,7 @@
 [tool]
 [tool.poetry]
 name = "nannyml"
-version = "0.8.3"
+version = "0.8.6"
 homepage = "https://github.com/nannyml/nannyml"
 description = "NannyML, Your library for monitoring model performance."
 authors = ["Niels Nuyttens <niels@nannyml.com>"]
@@ -37,7 +37,7 @@ category-encoders = "^2.3.0"
 matplotlib = "^3.5.1"
 plotly = "^5.6.0"
 scipy = "^1.7.3"
-numpy = "^1.21"
+numpy = "^1.21,<1.25"
 seaborn = "^0.11.2"
 kaleido = "0.2.1"
 pyarrow = "^8.0.0"
@@ -56,6 +56,8 @@ APScheduler = "^3.9.1"
 psycopg2-binary = "^2.9.3"
 analytics-python = "^1.4.0"
 python-dotenv = "^0.21.0"
+types-pyyaml = "^6.0.12.8"
+types-python-dateutil = "^2.8.19.10"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.3.0"
